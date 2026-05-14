@@ -3,44 +3,54 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>USDC Penny Tracker</title>
+    <title>USDC Penny Tracker - Live</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
         body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
-        .card { background: white; border-radius: 12px; border: 1px solid #e2e8f0; }
+        .card { background: white; border-radius: 12px; border: 1px solid #e2e8f0; transition: all 0.3s ease; }
+        .live-dot { height: 8px; width: 8px; background-color: #ef4444; border-radius: 50%; display: inline-block; animation: blink 1s infinite; }
+        @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.3; } 100% { opacity: 1; } }
     </style>
 </head>
 <body class="p-4 md:p-8">
     <div class="max-w-6xl mx-auto">
         <header class="flex justify-between items-center mb-8">
             <div>
-                <h1 class="text-2xl font-extrabold text-slate-900">USDC Penny Tracker <span class="text-blue-600 text-xs font-mono">v1.7</span></h1>
-                <p id="status-text" class="text-slate-500 text-sm italic">Tentando conexão segura...</p>
+                <h1 class="text-3xl font-black text-slate-900 tracking-tighter">USDC Penny Tracker <span class="text-blue-600 text-xs font-mono">v2.0 LIVE</span></h1>
+                <p class="text-slate-500 text-sm"><span class="live-dot mr-1"></span> Conexão direta via WebSocket (Sem bloqueios de CORS)</p>
             </div>
-            <button onclick="updateMarketData()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-lg shadow-md transition-all active:scale-95">
-                Atualizar Agora
-            </button>
+            <div id="connection-status" class="bg-slate-200 text-slate-600 text-[10px] font-bold px-3 py-1 rounded-full uppercase">Iniciando...</div>
         </header>
 
-        <div id="statsGrid" class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8"></div>
-
-        <div class="card overflow-hidden shadow-sm">
-            <div class="bg-white border-b border-slate-100 px-6 py-4">
-                <h2 class="font-bold text-slate-800 uppercase text-xs tracking-widest">Ranking de Eficiência (USDC)</h2>
+        <div id="statsGrid" class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+            <div class="card p-4 border-l-4 border-blue-500 shadow-sm">
+                <p class="text-[10px] font-bold text-slate-400 uppercase">Status do Mercado</p>
+                <h3 id="market-status" class="text-xl font-black text-slate-800">Sincronizando...</h3>
             </div>
+            <div class="card p-4 border-l-4 border-green-500 shadow-sm">
+                <p class="text-[10px] font-bold text-slate-400 uppercase">Pares Monitorados</p>
+                <h3 id="pair-count" class="text-xl font-black text-slate-800">0</h3>
+            </div>
+            <div class="card p-4 border-l-4 border-amber-500 shadow-sm">
+                <p class="text-[10px] font-bold text-slate-400 uppercase">Última Atualização</p>
+                <h3 id="last-update" class="text-xl font-black text-slate-800">--:--:--</h3>
+            </div>
+        </div>
+
+        <div class="card overflow-hidden shadow-md">
             <div class="overflow-x-auto">
                 <table class="w-full text-left">
-                    <thead class="bg-slate-50 text-slate-500 text-[10px] uppercase font-bold">
+                    <thead class="bg-slate-50 text-slate-500 text-[10px] uppercase font-black tracking-widest">
                         <tr>
-                            <th class="px-6 py-3">Par</th>
-                            <th class="px-6 py-3">Preço</th>
-                            <th class="px-6 py-3">Volume</th>
-                            <th class="px-6 py-3">Score</th>
+                            <th class="px-6 py-4">Par USDC</th>
+                            <th class="px-6 py-4">Preço Atual</th>
+                            <th class="px-6 py-4">Vol 24h</th>
+                            <th class="px-6 py-4">Score Eficiência</th>
                         </tr>
                     </thead>
-                    <tbody id="marketTableBody" class="divide-y divide-slate-100">
-                        <tr><td colspan="4" class="px-6 py-10 text-center text-slate-400">Sincronizando dados...</td></tr>
+                    <tbody id="marketTableBody" class="divide-y divide-slate-100 font-medium">
+                        <tr><td colspan="4" class="px-6 py-20 text-center text-slate-400 font-bold italic">A abrir canal de dados em tempo real...</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -48,84 +58,68 @@
     </div>
 
     <script>
-        async function updateMarketData() {
-            const statusText = document.getElementById('status-text');
-            const table = document.getElementById('marketTableBody');
-            
-            // Usando CorsProxy.io que é mais estável para APIs de trading
-            const targetUrl = 'https://api.binance.com/api/3/ticker/24hr';
-            const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`;
+        const tableBody = document.getElementById('marketTableBody');
+        const connStatus = document.getElementById('connection-status');
+        let marketData = {};
 
-            try {
-                statusText.innerText = "Conectando ao servidor global...";
-                const response = await fetch(proxyUrl);
+        // Inicia WebSocket da Binance (Contorna 100% o erro de CORS visto na image_856213.png)
+        function initWebSocket() {
+            const socket = new WebSocket('wss://stream.binance.com:9443/ws/!ticker@arr');
+
+            socket.onopen = () => {
+                connStatus.innerText = "Conectado";
+                connStatus.className = "bg-green-100 text-green-600 text-[10px] font-bold px-3 py-1 rounded-full uppercase";
+                document.getElementById('market-status').innerText = "Ao Vivo";
+            };
+
+            socket.onmessage = (event) => {
+                const data = JSON.parse(event.data);
                 
-                if (!response.ok) throw new Error();
-                
-                const data = await response.json();
-                
+                // Filtra e processa os dados
                 const filtered = data
-                    .filter(t => t.symbol.endsWith('USDC') && parseFloat(t.lastPrice) <= 0.05 && parseFloat(t.quoteVolume) > 100000)
+                    .filter(t => t.s.endsWith('USDC') && parseFloat(t.c) <= 0.05 && parseFloat(t.q) > 100000)
                     .map(t => {
-                        const vola = Math.abs(parseFloat(t.priceChangePercent));
-                        const volume = parseFloat(t.quoteVolume);
+                        const vola = Math.abs(parseFloat(t.P));
+                        const volume = parseFloat(t.q);
                         return {
-                            symbol: t.symbol.replace('USDC', ''),
-                            price: parseFloat(t.lastPrice).toFixed(6),
+                            symbol: t.s.replace('USDC', ''),
+                            price: parseFloat(t.c).toFixed(6),
                             volume: volume,
                             score: (vola * (volume / 1000000)).toFixed(2)
                         };
                     })
                     .sort((a, b) => b.score - a.score);
 
-                renderAll(filtered);
-                statusText.innerText = "Conexão estável. Dados atualizados.";
-                statusText.className = "text-green-600 text-sm font-bold";
-            } catch (e) {
-                console.error(e);
-                statusText.innerText = "Erro persistente de rede. Verifique seu navegador.";
-                statusText.className = "text-red-500 text-sm font-bold";
-                table.innerHTML = '<tr><td colspan="4" class="px-6 py-10 text-center text-red-400">Falha ao obter dados. Tente usar o Chrome sem extensões.</td></tr>';
-            }
+                renderTable(filtered);
+            };
+
+            socket.onerror = (err) => {
+                connStatus.innerText = "Erro de Conexão";
+                connStatus.className = "bg-red-100 text-red-600 text-[10px] font-bold px-3 py-1 rounded-full uppercase";
+            };
+
+            socket.onclose = () => {
+                setTimeout(initWebSocket, 5000); // Tenta reconectar se cair
+            };
         }
 
-        function renderAll(data) {
-            const table = document.getElementById('marketTableBody');
-            const stats = document.getElementById('statsGrid');
+        function renderTable(data) {
+            if (data.length === 0) return;
 
-            if (data.length === 0) {
-                table.innerHTML = '<tr><td colspan="4" class="px-6 py-10 text-center text-slate-400">Nenhuma oportunidade penny encontrada.</td></tr>';
-                return;
-            }
-
-            table.innerHTML = data.map(i => `
-                <tr class="hover:bg-blue-50/50 transition-colors">
-                    <td class="px-6 py-4 font-bold text-slate-900">${i.symbol}<span class="text-[10px] text-slate-400">/USDC</span></td>
-                    <td class="px-6 py-4 text-blue-600 font-mono text-sm">${i.price}</td>
-                    <td class="px-6 py-4 text-slate-500 text-sm">$${(i.volume/1000).toFixed(0)}k</td>
-                    <td class="px-6 py-4 font-black text-slate-800">${i.score}</td>
+            tableBody.innerHTML = data.map(i => `
+                <tr class="hover:bg-blue-50/40 transition-all">
+                    <td class="px-6 py-4 text-slate-900 font-black">${i.symbol}<span class="text-[10px] text-slate-400 font-normal">/USDC</span></td>
+                    <td class="px-6 py-4 text-blue-600 font-mono font-bold">${i.price}</td>
+                    <td class="px-6 py-4 text-slate-500 text-sm italic">$${(i.volume/1000).toFixed(0)}k</td>
+                    <td class="px-6 py-4 font-black text-slate-800 text-lg">${i.score}</td>
                 </tr>
             `).join('');
 
-            const top = data[0];
-            stats.innerHTML = `
-                <div class="card p-4 border-l-4 border-blue-600">
-                    <p class="text-[10px] font-bold text-slate-400 uppercase">Principal Oportunidade</p>
-                    <h3 class="text-xl font-black text-slate-900">${top.symbol}</h3>
-                </div>
-                <div class="card p-4 border-l-4 border-green-500">
-                    <p class="text-[10px] font-bold text-slate-400 uppercase">Pares Analisados</p>
-                    <h3 class="text-xl font-black text-slate-900">${data.length}</h3>
-                </div>
-                <div class="card p-4 border-l-4 border-amber-500">
-                    <p class="text-[10px] font-bold text-slate-400 uppercase">Eficiência Global</p>
-                    <h3 class="text-xl font-black text-slate-900">Alta</h3>
-                </div>
-            `;
+            document.getElementById('pair-count').innerText = data.length;
+            document.getElementById('last-update').innerText = new Date().toLocaleTimeString();
         }
 
-        updateMarketData();
-        setInterval(updateMarketData, 60000);
+        initWebSocket();
     </script>
 </body>
 </html>
