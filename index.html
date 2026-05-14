@@ -3,123 +3,61 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>USDC Penny Tracker - Live</title>
+    <title>USDC Penny Tracker - Vercel Server</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
         body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
-        .card { background: white; border-radius: 12px; border: 1px solid #e2e8f0; transition: all 0.3s ease; }
-        .live-dot { height: 8px; width: 8px; background-color: #ef4444; border-radius: 50%; display: inline-block; animation: blink 1s infinite; }
-        @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.3; } 100% { opacity: 1; } }
     </style>
 </head>
 <body class="p-4 md:p-8">
     <div class="max-w-6xl mx-auto">
         <header class="flex justify-between items-center mb-8">
-            <div>
-                <h1 class="text-3xl font-black text-slate-900 tracking-tighter">USDC Penny Tracker <span class="text-blue-600 text-xs font-mono">v2.0 LIVE</span></h1>
-                <p class="text-slate-500 text-sm"><span class="live-dot mr-1"></span> Conexão direta via WebSocket (Sem bloqueios de CORS)</p>
-            </div>
-            <div id="connection-status" class="bg-slate-200 text-slate-600 text-[10px] font-bold px-3 py-1 rounded-full uppercase">Iniciando...</div>
+            <h1 class="text-2xl font-black text-slate-900">USDC Penny Tracker <span class="text-blue-600 text-xs">v3.0 SERVER</span></h1>
+            <div id="status" class="text-xs font-bold px-3 py-1 rounded-full uppercase bg-slate-100 text-slate-500">Sincronizando...</div>
         </header>
 
-        <div id="statsGrid" class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-            <div class="card p-4 border-l-4 border-blue-500 shadow-sm">
-                <p class="text-[10px] font-bold text-slate-400 uppercase">Status do Mercado</p>
-                <h3 id="market-status" class="text-xl font-black text-slate-800">Sincronizando...</h3>
-            </div>
-            <div class="card p-4 border-l-4 border-green-500 shadow-sm">
-                <p class="text-[10px] font-bold text-slate-400 uppercase">Pares Monitorados</p>
-                <h3 id="pair-count" class="text-xl font-black text-slate-800">0</h3>
-            </div>
-            <div class="card p-4 border-l-4 border-amber-500 shadow-sm">
-                <p class="text-[10px] font-bold text-slate-400 uppercase">Última Atualização</p>
-                <h3 id="last-update" class="text-xl font-black text-slate-800">--:--:--</h3>
-            </div>
-        </div>
-
-        <div class="card overflow-hidden shadow-md">
-            <div class="overflow-x-auto">
-                <table class="w-full text-left">
-                    <thead class="bg-slate-50 text-slate-500 text-[10px] uppercase font-black tracking-widest">
-                        <tr>
-                            <th class="px-6 py-4">Par USDC</th>
-                            <th class="px-6 py-4">Preço Atual</th>
-                            <th class="px-6 py-4">Vol 24h</th>
-                            <th class="px-6 py-4">Score Eficiência</th>
-                        </tr>
-                    </thead>
-                    <tbody id="marketTableBody" class="divide-y divide-slate-100 font-medium">
-                        <tr><td colspan="4" class="px-6 py-20 text-center text-slate-400 font-bold italic">A abrir canal de dados em tempo real...</td></tr>
-                    </tbody>
-                </table>
-            </div>
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            <table class="w-full text-left">
+                <thead class="bg-slate-50 text-slate-500 text-[10px] uppercase font-black">
+                    <tr>
+                        <th class="px-6 py-4">Par</th>
+                        <th class="px-6 py-4">Preço</th>
+                        <th class="px-6 py-4">Score Eficiência</th>
+                    </tr>
+                </thead>
+                <tbody id="tableBody" class="divide-y divide-slate-100 font-medium">
+                    <tr><td colspan="3" class="px-6 py-20 text-center text-slate-400">A processar dados no servidor...</td></tr>
+                </tbody>
+            </table>
         </div>
     </div>
 
     <script>
-        const tableBody = document.getElementById('marketTableBody');
-        const connStatus = document.getElementById('connection-status');
-        let marketData = {};
-
-        // Inicia WebSocket da Binance (Contorna 100% o erro de CORS visto na image_856213.png)
-        function initWebSocket() {
-            const socket = new WebSocket('wss://stream.binance.com:9443/ws/!ticker@arr');
-
-            socket.onopen = () => {
-                connStatus.innerText = "Conectado";
-                connStatus.className = "bg-green-100 text-green-600 text-[10px] font-bold px-3 py-1 rounded-full uppercase";
-                document.getElementById('market-status').innerText = "Ao Vivo";
-            };
-
-            socket.onmessage = (event) => {
-                const data = JSON.parse(event.data);
+        async function loadData() {
+            const status = document.getElementById('status');
+            try {
+                // Chama a API que você criou na Vercel (sem problemas de CORS!)
+                const res = await fetch('/api/data');
+                const data = await res.json();
                 
-                // Filtra e processa os dados
-                const filtered = data
-                    .filter(t => t.s.endsWith('USDC') && parseFloat(t.c) <= 0.05 && parseFloat(t.q) > 100000)
-                    .map(t => {
-                        const vola = Math.abs(parseFloat(t.P));
-                        const volume = parseFloat(t.q);
-                        return {
-                            symbol: t.s.replace('USDC', ''),
-                            price: parseFloat(t.c).toFixed(6),
-                            volume: volume,
-                            score: (vola * (volume / 1000000)).toFixed(2)
-                        };
-                    })
-                    .sort((a, b) => b.score - a.score);
-
-                renderTable(filtered);
-            };
-
-            socket.onerror = (err) => {
-                connStatus.innerText = "Erro de Conexão";
-                connStatus.className = "bg-red-100 text-red-600 text-[10px] font-bold px-3 py-1 rounded-full uppercase";
-            };
-
-            socket.onclose = () => {
-                setTimeout(initWebSocket, 5000); // Tenta reconectar se cair
-            };
+                document.getElementById('tableBody').innerHTML = data.map(i => `
+                    <tr class="hover:bg-slate-50">
+                        <td class="px-6 py-4 font-bold text-slate-900">${i.symbol}</td>
+                        <td class="px-6 py-4 text-blue-600 font-mono">${i.price}</td>
+                        <td class="px-6 py-4 font-black text-slate-800">${i.score}</td>
+                    </tr>
+                `).join('');
+                
+                status.innerText = "Atualizado";
+                status.className = "text-xs font-bold px-3 py-1 rounded-full uppercase bg-green-100 text-green-600";
+            } catch (e) {
+                status.innerText = "Erro no Servidor";
+                status.className = "text-xs font-bold px-3 py-1 rounded-full uppercase bg-red-100 text-red-600";
+            }
         }
-
-        function renderTable(data) {
-            if (data.length === 0) return;
-
-            tableBody.innerHTML = data.map(i => `
-                <tr class="hover:bg-blue-50/40 transition-all">
-                    <td class="px-6 py-4 text-slate-900 font-black">${i.symbol}<span class="text-[10px] text-slate-400 font-normal">/USDC</span></td>
-                    <td class="px-6 py-4 text-blue-600 font-mono font-bold">${i.price}</td>
-                    <td class="px-6 py-4 text-slate-500 text-sm italic">$${(i.volume/1000).toFixed(0)}k</td>
-                    <td class="px-6 py-4 font-black text-slate-800 text-lg">${i.score}</td>
-                </tr>
-            `).join('');
-
-            document.getElementById('pair-count').innerText = data.length;
-            document.getElementById('last-update').innerText = new Date().toLocaleTimeString();
-        }
-
-        initWebSocket();
+        loadData();
+        setInterval(loadData, 30000);
     </script>
 </body>
 </html>
