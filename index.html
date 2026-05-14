@@ -2,47 +2,45 @@
 <html lang="pt">
 <head>
     <meta charset="UTF-8">
-    <title>USDC Tracker v3.3</title>
+    <title>USDC Tracker v3.4</title>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="bg-gray-900 text-white p-6">
-    <div class="max-w-xl mx-auto">
-        <div class="flex justify-between items-center mb-6">
-            <h1 class="text-xl font-bold">USDC Penny Tracker <span class="text-blue-400 text-xs">v3.3</span></h1>
-            <div id="status" class="text-[10px] bg-gray-800 px-2 py-1 rounded">A ligar...</div>
-        </div>
+<body class="bg-slate-900 text-white p-4 md:p-10">
+    <div class="max-w-2xl mx-auto">
+        <header class="flex justify-between items-center mb-8">
+            <h1 class="text-2xl font-black tracking-tight">USDC Penny <span class="text-blue-500">v3.4</span></h1>
+            <div id="status" class="text-[10px] font-bold px-3 py-1 rounded-full bg-slate-800 uppercase">A ligar...</div>
+        </header>
 
-        <div class="bg-gray-800 rounded-lg overflow-hidden border border-gray-700">
-            <table class="w-full text-left text-sm">
-                <thead class="bg-gray-700 text-gray-400">
+        <div class="bg-slate-800 rounded-2xl shadow-2xl border border-slate-700 overflow-hidden">
+            <table class="w-full text-left">
+                <thead class="bg-slate-700/50 text-slate-400 text-[10px] uppercase font-black">
                     <tr>
-                        <th class="px-4 py-2">PAR</th>
-                        <th class="px-4 py-2">PREÇO</th>
-                        <th class="px-4 py-2">SCORE</th>
+                        <th class="px-6 py-4">Ativo</th>
+                        <th class="px-6 py-4">Preço</th>
+                        <th class="px-6 py-4">Score</th>
                     </tr>
                 </thead>
-                <tbody id="lista" class="divide-y divide-gray-700">
-                    <tr><td colspan="3" class="p-10 text-center text-gray-500">A carregar dados via Proxy Seguro...</td></tr>
+                <tbody id="grid" class="divide-y divide-slate-700">
+                    <tr><td colspan="3" class="px-6 py-20 text-center text-slate-500 italic">A carregar via Proxy Seguro...</td></tr>
                 </tbody>
             </table>
         </div>
     </div>
 
     <script>
-        async function fetchBinance() {
+        async function updateData() {
             const status = document.getElementById('status');
-            const lista = document.getElementById('lista');
-            
-            try {
-                // Força a limpeza de cache com um timestamp
-                const api = `https://api.binance.com/api/3/ticker/24hr?t=${Date.now()}`;
-                const proxy = `https://api.allorigins.win/get?url=${encodeURIComponent(api)}`;
-                
-                const res = await fetch(proxy);
-                const json = await res.json();
-                const data = JSON.parse(json.contents);
+            const grid = document.getElementById('grid');
 
-                const filtered = data
+            try {
+                // Bypass de CORS via AllOrigins para evitar o erro de servidor visto na image_8500bb.png
+                const api = `https://api.binance.com/api/3/ticker/24hr?t=${Date.now()}`;
+                const response = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(api)}`);
+                const wrapper = await response.json();
+                const data = JSON.parse(wrapper.contents);
+
+                const list = data
                     .filter(t => t.symbol.endsWith('USDC') && parseFloat(t.lastPrice) <= 0.05 && parseFloat(t.quoteVolume) > 100000)
                     .map(t => ({
                         s: t.symbol.replace('USDC', ''),
@@ -51,23 +49,24 @@
                     }))
                     .sort((a, b) => b.score - a.score);
 
-                lista.innerHTML = filtered.map(i => `
-                    <tr class="hover:bg-gray-750">
-                        <td class="px-4 py-3 font-bold">${i.s}</td>
-                        <td class="px-4 py-3 text-blue-400 font-mono">${i.p}</td>
-                        <td class="px-4 py-3 font-bold">${i.score}</td>
+                grid.innerHTML = list.map(item => `
+                    <tr class="hover:bg-slate-700/30">
+                        <td class="px-6 py-4 font-bold">${item.s}</td>
+                        <td class="px-6 py-4 text-blue-400 font-mono">${item.p}</td>
+                        <td class="px-6 py-4 font-black text-slate-300 text-lg">${item.score}</td>
                     </tr>
                 `).join('');
-                
-                status.innerText = "LIVE";
-                status.classList.add("text-green-400");
+
+                status.innerText = "Online";
+                status.className = "text-[10px] font-bold px-3 py-1 rounded-full bg-green-900/30 text-green-400 uppercase";
             } catch (e) {
-                status.innerText = "ERRO";
-                status.classList.add("text-red-400");
+                status.innerText = "Erro API";
+                status.className = "text-[10px] font-bold px-3 py-1 rounded-full bg-red-900/30 text-red-400 uppercase";
             }
         }
-        fetchBinance();
-        setInterval(fetchBinance, 30000);
+
+        updateData();
+        setInterval(updateData, 30000);
     </script>
 </body>
 </html>
