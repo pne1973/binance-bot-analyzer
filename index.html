@@ -18,8 +18,8 @@
     <div class="max-w-6xl mx-auto">
         <header class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
             <div>
-                <h1 class="text-3xl font-extrabold text-gray-900 tracking-tight">USDC Penny Tracker <span class="text-blue-600 text-sm font-normal">v1.3</span></h1>
-                <p class="text-gray-500 mt-1">Filtro automático para ativos abaixo de $0.05 na Binance Spot.</p>
+                <h1 class="text-3xl font-extrabold text-gray-900 tracking-tight">USDC Penny Tracker <span class="text-blue-600 text-sm font-normal">v1.4</span></h1>
+                <p class="text-gray-500 mt-1">Análise via Proxy para contornar bloqueios de CORS na Vercel.</p>
             </div>
             <div class="flex items-center gap-3">
                 <div id="loadingIndicator" class="hidden items-center gap-2 text-blue-600 font-medium">
@@ -36,7 +36,7 @@
         <div class="card overflow-hidden">
             <div class="bg-white border-b border-gray-100 px-6 py-4 flex justify-between items-center">
                 <h2 class="text-lg font-semibold text-gray-800">Ranking de Eficiência</h2>
-                <span id="apiStatus" class="text-xs font-mono text-gray-400 font-bold">CONECTANDO...</span>
+                <span id="apiStatus" class="text-xs font-mono text-gray-400 font-bold">A LER VIA PROXY...</span>
             </div>
             <div class="overflow-x-auto">
                 <table class="w-full text-left border-collapse">
@@ -55,7 +55,7 @@
         </div>
 
         <footer class="mt-8 text-center text-gray-400 text-sm">
-            Filtros: Preço <= 0.05 USDC | Volume > 100k USDC | API: api.binance.com
+            Filtros: Preço <= 0.05 USDC | Volume > 100k USDC | Conexão: Proxy AllOrigins
         </footer>
     </div>
 
@@ -69,12 +69,16 @@
             loader.classList.replace('hidden', 'flex');
 
             try {
-                // Tentativa usando o domínio secundário para mitigar erros de CORS em alguns browsers
-                const response = await fetch('https://api3.binance.com/api/3/ticker/24hr');
+                // Utilização do Proxy AllOrigins para contornar o erro visível na image_856d1a.png
+                const targetUrl = encodeURIComponent('https://api.binance.com/api/3/ticker/24hr');
+                const response = await fetch(`https://api.allorigins.win/get?url=${targetUrl}`);
+                
                 if (!response.ok) throw new Error();
                 
-                const data = await response.json();
-                statusLabel.innerText = "ONLINE";
+                const wrapper = await response.json();
+                const data = JSON.parse(wrapper.contents); // O AllOrigins devolve os dados dentro de 'contents'
+
+                statusLabel.innerText = "ONLINE (PROXY)";
                 statusLabel.className = "text-xs font-mono text-green-500 font-bold";
 
                 const candidates = data.filter(item => {
@@ -99,9 +103,9 @@
 
                 renderContent(processed);
             } catch (error) {
-                statusLabel.innerText = "ERRO DE LIGAÇÃO (CORS)";
+                statusLabel.innerText = "ERRO DE PROXY";
                 statusLabel.className = "text-xs font-mono text-red-500 font-bold";
-                console.error("Binance API Error:", error);
+                console.error("Proxy Error:", error);
             } finally {
                 loader.classList.replace('flex', 'hidden');
             }
@@ -112,7 +116,7 @@
             const statsGrid = document.getElementById('statsGrid');
 
             if (data.length === 0) {
-                tableBody.innerHTML = '<tr><td colspan="5" class="px-6 py-10 text-center text-gray-500">Aguardando dados da Binance...</td></tr>';
+                tableBody.innerHTML = '<tr><td colspan="5" class="px-6 py-10 text-center text-gray-500">A processar dados via Proxy...</td></tr>';
                 return;
             }
 
@@ -152,7 +156,7 @@
                 <div class="card p-6 border-t-4 border-purple-500">
                     <p class="text-sm font-semibold text-gray-500 uppercase font-bold">Penny Pairs</p>
                     <h3 class="text-2xl font-extrabold text-gray-900 mt-1">${data.length} Encontrados</h3>
-                    <p class="text-sm text-purple-600 mt-2 font-medium">Pares USDC ativos</p>
+                    <p class="text-sm text-purple-600 mt-2 font-medium">Análise filtrada</p>
                 </div>
             `;
         }
